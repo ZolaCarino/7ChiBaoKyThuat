@@ -81,11 +81,11 @@ def check_stock_score(symbol):
         # Tính điểm hệ thống
         bb_score = 1 if (close_prev <= bbm_prev and close_curr > bbm_curr) or (low_curr <= bbl_curr and close_curr > bbl_curr) else (-1 if (close_prev >= bbm_prev and close_curr < bbm_curr) or (high_curr >= bbu_curr and close_curr < bbu_curr) else 0)
         rsi_score = 1 if rsi_curr <= 30 or (rsi_prev < 50 and rsi_curr >= 50) else (-1 if rsi_curr >= 70 or (rsi_prev > 50 and rsi_curr <= 50) else 0)
-        macd_score = 1 if macd_prev <= macds_prev and macd_curr > macds_curr else (-1 if macd_prev >= macds_prev and macd_curr < macds_curr) else 0)
+        macd_score = 1 if macd_prev <= macds_prev and macd_curr > macds_curr else -1 if macd_prev >= macds_prev and macd_curr < macds_curr else 0
         sar_score = 1 if pd.notna(df[[c for c in df.columns if c.upper().startswith('PSARL')][0]].iloc[-1]) else -1
-        ichi_score = 1 if close_curr > max(isa_curr, isb_curr) and tenkan_prev <= kijun_prev and tenkan_curr > kijun_curr else (-1 if close_curr < min(isa_curr, isb_curr) and tenkan_prev >= kijun_prev and tenkan_curr < kijun_curr) else 0)
+        ichi_score = 1 if close_curr > max(isa_curr, isb_curr) and tenkan_prev <= kijun_prev and tenkan_curr > kijun_curr else -1 if close_curr < min(isa_curr, isb_curr) and tenkan_prev >= kijun_prev and tenkan_curr < kijun_curr else 0
         vpvr_score = 1 if close_curr > poc_top else (-1 if close_curr < poc_bottom else 0)
-
+       
         # Vol Kicker
         vol_ma20 = float(volume_series.rolling(window=20).mean().iloc[-1])
         vol_curr = safe_val('Volume', -1)
