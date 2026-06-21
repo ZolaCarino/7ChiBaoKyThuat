@@ -1,0 +1,32 @@
+name: Daily Stock Scanner Bot
+
+on:
+  schedule:
+    # 15:00 giờ Việt Nam (ICT) tương đương với 08:00 giờ Quốc Tế (UTC)
+    # Chạy từ thứ 2 đến thứ 6 hàng tuần
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch: # Cho phép anh vào web ấn nút bắt chạy thủ công bất cứ lúc nào nếu muốn thử nghiệm
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository code
+      uses: actions/checkout@v3
+
+    - name: Set up Python environment
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install required libraries
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas pandas-ta vnstock
+
+    - name: Execute automated stock scan
+      env:
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: python scan_alert.py
