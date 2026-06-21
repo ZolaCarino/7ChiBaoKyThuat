@@ -6,7 +6,7 @@ from vnstock.ui import Market
 from datetime import datetime, timedelta
 
 # Nhập Token Bot Telegram của anh vào đây
-TELEGRAM_TOKEN = 8998356142:AAE0kgEKrLhaVFwvSOwIORSUgfS0y9dXcyU
+TELEGRAM_TOKEN = "8998356142:AAE0kgEKrLhaVFwvSOwIORSUgfS0y9dXcyU"
 
 # Khởi tạo con Bot lắng nghe
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
