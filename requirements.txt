@@ -1,4 +1,6 @@
 streamlit
+pyTelegramBotAPI
 pandas
 pandas-ta
 vnstock
+requests
