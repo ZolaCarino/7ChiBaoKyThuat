@@ -1,4 +1,4 @@
 streamlit
 pandas
-pandas-ta
-vnstock
+vnstock>=4.0.2
+pandas-ta-classic
