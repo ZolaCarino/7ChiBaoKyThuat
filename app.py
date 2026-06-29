@@ -39,7 +39,7 @@ def advanced_analyzer(df, symbol):
     rsi = df.ta.rsi(length=14)
     macd = df.ta.macd(fast=12, slow=26, signal=9)
     psar = df.ta.psar(af0=0.02, af=0.02, max_af=0.2)
-    ichi_df, _ = df.ta.ichimoku(tenkan=9, kijun=26, senkou=52)
+    ichi_df = df.ta.ichimoku(tenkan=9, kijun=26, senkou=52)
     
     if bbands is None or rsi is None or macd is None or psar is None or ichi_df is None:
         st.error("[-] Không thể tính toán đầy đủ các chỉ báo kỹ thuật.")
