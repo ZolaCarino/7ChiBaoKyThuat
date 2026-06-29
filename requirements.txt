@@ -1,3 +1,4 @@
 streamlit
 vnstock==4.0.4
-pandas-ta-classic
+pandas-ta==0.4.71b0
+numpy<2.0.0
