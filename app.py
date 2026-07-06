@@ -3,6 +3,7 @@ import pandas as pd
 import pandas_ta_classic as ta
 from vnstock.ui import Market
 from datetime import datetime, timedelta
+import concurrent.futures
 
 # Thiết lập cấu hình trang hiển thị chuẩn Mobile-First
 st.set_page_config(
@@ -11,6 +12,7 @@ st.set_page_config(
     layout="centered"
 )
 
+@st.cache_data(ttl=900, show_spinner=False)
 def fetch_data_mac(symbol, show_error=True):
     """Kéo dữ liệu 1 năm bằng Unified UI"""
     end_date = str(datetime.now().date())
@@ -466,61 +468,59 @@ with tab2:
             st.warning("Rổ danh mục trống, anh vui lòng thêm ít nhất 1 mã để bắt đầu quét.")
         else:
             bulk_results = []
-            
-            # Khởi tạo thanh tiến trình chạy (Progress bar) cho trải nghiệm mượt mà
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Vòng lặp duyệt qua từng mã trong rổ để tính toán điểm số
-            for idx, ticker in enumerate(st.session_state.watchlist):
-                # Cập nhật trạng thái tiến độ quét
-                percent_complete = (idx + 1) / len(st.session_state.watchlist)
-                progress_bar.progress(percent_complete)
-                status_text.text(f"⚡ Đang xử lý chỉ báo: {ticker} ({idx+1}/{len(st.session_state.watchlist)})")
-                
-                # Gọi kéo dữ liệu (Ẩn thông báo đỏ lỗi hệ thống để không làm bẩn màn hình bảng điểm)
+            # Đóng gói tác vụ của 1 mã CP vào một hàm nhỏ để giao cho luồng (thread) xử lý
+            def process_single_ticker(ticker):
                 df_ticker = fetch_data_mac(ticker, show_error=False)
                 if df_ticker is not None:
                     res_ticker = compute_signals(df_ticker)
                     if res_ticker:
-                        bulk_results.append({
+                        return {
                             "Mã CP": ticker,
                             "Giá đóng cửa": f"{res_ticker['close_curr']:,}",
                             "Điểm Gốc": res_ticker['base_score'],
                             "TỔNG ĐIỂM": res_ticker['total_score'],
                             "Khuyến Nghị Tác Chiến": res_ticker['final_action']
-                        })
-                    else:
-                        bulk_results.append({
-                            "Mã CP": ticker, "Giá đóng cửa": "N/A", "Điểm Gốc": 0, "TỔNG ĐIỂM": -99, "Khuyến Nghị Tác Chiến": "⚠️ Lỗi tính chỉ báo"
-                        })
-                else:
-                    bulk_results.append({
-                        "Mã CP": ticker, "Giá đóng cửa": "N/A", "Điểm Gốc": 0, "TỔNG ĐIỂM": -99, "Khuyến Nghị Tác Chiến": "❌ Lỗi kết nối dữ liệu"
-                    })
+                        }
+                # Nếu lỗi mạng hoặc lỗi tính toán
+                return {
+                    "Mã CP": ticker, "Giá đóng cửa": "N/A", "Điểm Gốc": 0, "TỔNG ĐIỂM": -99, "Khuyến Nghị Tác Chiến": "⚠️ Lỗi kết nối / dữ liệu"
+                }
+
+            # KÍCH HOẠT ĐA LUỒNG (Mở 5 luồng chạy song song cùng lúc)
+            total_tickers = len(st.session_state.watchlist)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                # Gửi toàn bộ mã CP cho 5 luồng xử lý
+                future_to_ticker = {executor.submit(process_single_ticker, t): t for t in st.session_state.watchlist}
+                
+                # Gom kết quả ngay khi có bất kỳ luồng nào chạy xong 1 mã
+                for idx, future in enumerate(concurrent.futures.as_completed(future_to_ticker)):
+                    ticker = future_to_ticker[future]
+                    try:
+                        result = future.result()
+                        bulk_results.append(result)
+                    except Exception as exc:
+                        pass
+                    
+                    # Cập nhật thanh tiến trình mượt mà
+                    percent_complete = (idx + 1) / total_tickers
+                    progress_bar.progress(percent_complete)
+                    status_text.text(f"⚡ Đã quét xong: {ticker} ({idx+1}/{total_tickers})")
             
-            # Xoá thanh tiến độ sau khi hoàn tất quét
             progress_bar.empty()
             status_text.empty()
             
             # --- RENDER BẢNG ĐIỂM ĐỒNG LOẠT ---
             if bulk_results:
                 df_summary = pd.DataFrame(bulk_results)
-                
-                # Tự động sắp xếp Leaderboard: Điểm số cao nhất xếp lên trên cùng
                 df_summary = df_summary.sort_values(by="TỔNG ĐIỂM", ascending=False).reset_index(drop=True)
-                
-                # Thay thế điểm lỗi -99 bằng chữ N/A hiển thị trực quan cho người dùng
                 df_summary["TỔNG ĐIỂM"] = df_summary["TỔNG ĐIỂM"].apply(lambda x: "Lỗi" if x == -99 else f"{x} đ")
                 df_summary["Điểm Gốc"] = df_summary["Điểm Gốc"].apply(lambda x: f"{x} đ")
 
                 st.markdown("### 🏆 Bảng Xếp Hạng Khuyến Nghị Kỹ Thuật (Watchlist)")
                 st.write("Bảng dữ liệu tự động lọc những mã có cấu trúc dòng tiền và kỹ thuật mạnh nhất lên đầu.")
-                
-                # Hiển thị bảng tương tác chất lượng cao của Streamlit
-                st.dataframe(
-                    df_summary, 
-                    use_container_width=True
-                )
+                st.dataframe(df_summary, use_container_width=True)
             else:
                 st.error("Không lấy được dữ liệu của bất kỳ mã nào trong danh mục.")
