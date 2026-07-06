@@ -5,6 +5,32 @@ from vnstock.ui import Market
 from datetime import datetime, timedelta
 import concurrent.futures
 
+import os
+
+WATCHLIST_FILE = "watchlist.txt"
+DEFAULT_WATCHLIST = ["SSI", "HPG", "VCI", "PVT", "FPT", "FRT", "MWG", "ACB", "TCB"]
+
+def load_watchlist():
+    """Hàm đọc rổ cổ phiếu từ file, nếu file chưa có thì lấy rổ mặc định"""
+    if os.path.exists(WATCHLIST_FILE):
+        try:
+            with open(WATCHLIST_FILE, "r") as f:
+                tickers = [line.strip().upper() for line in f.readlines() if line.strip()]
+                if tickers:
+                    return tickers
+        except Exception:
+            pass
+    return DEFAULT_WATCHLIST
+
+def save_watchlist(watchlist):
+    """Hàm ghi đè rổ cổ phiếu hiện tại vào file lưu trữ"""
+    try:
+        with open(WATCHLIST_FILE, "w") as f:
+            for ticker in watchlist:
+                f.write(f"{ticker}\n")
+    except Exception:
+        pass
+        
 # Thiết lập cấu hình trang hiển thị chuẩn Mobile-First
 st.set_page_config(
     page_title="Hệ Thống Phân Tích Kỹ Thuật Cổ Phiếu",
@@ -425,16 +451,16 @@ with tab2:
     st.subheader("📋 Quản lý Rổ Watchlist (Tối đa 20 mã)")
     st.write("Thêm hoặc loại bỏ các mã trong danh mục của anh. Hệ thống sẽ quét toàn bộ và xếp hạng.")
 
-    # Khởi tạo bộ nhớ danh mục mặc định ban đầu nếu chạy lần đầu tiên
+    # KHỞI TẠO TỪ FILE: Thay vì ghi cứng list, ta gọi hàm load_watchlist()
     if "watchlist" not in st.session_state:
-        st.session_state.watchlist = ["SSI", "HPG", "VND", "PVD", "FPT", "DIG", "MWG"]
+        st.session_state.watchlist = load_watchlist()
 
     # Khung thêm mã mới vào rổ
     col_add1, col_add2 = st.columns([3, 1])
     with col_add1:
         new_ticker = st.text_input("Gõ mã CP mới muốn thêm vào rổ:", value="", key="add_ticker_input").strip().upper()
     with col_add2:
-        st.write("##") # Đồng bộ khoảng cách dòng với Input
+        st.write("##") 
         add_btn = st.button("➕ Thêm vào rổ", use_container_width=True)
         if add_btn and new_ticker:
             if new_ticker in st.session_state.watchlist:
@@ -443,6 +469,10 @@ with tab2:
                 st.error("Rổ theo dõi đã đầy! Anh vui lòng xoá bớt mã trước khi thêm mới (Tối đa 20 mã).")
             else:
                 st.session_state.watchlist.append(new_ticker)
+                
+                # CẬP NHẬT: Lưu lại vào file ngay khi thêm mã thành công
+                save_watchlist(st.session_state.watchlist)
+                
                 st.success(f"Đã thêm {new_ticker} thành công!")
                 st.rerun()
 
@@ -453,13 +483,17 @@ with tab2:
         default=st.session_state.watchlist
     )
     
-    # Đồng bộ lại bộ nhớ nếu người dùng click xóa bớt mã bằng dấu X
+    # Đồng bộ lại bộ nhớ và lưu vào file nếu người dùng click xóa bớt mã bằng dấu X
     if selected_watchlist != st.session_state.watchlist:
         st.session_state.watchlist = selected_watchlist
+        
+        # CẬP NHẬT: Lưu lại vào file ngay khi xoá mã
+        save_watchlist(st.session_state.watchlist)
+        
         st.rerun()
 
     st.markdown("---")
-    
+        
     # Nút bấm quét tổng lực rổ cổ phiếu
     run_bulk = st.button("🚀 KÍCH HOẠT QUÉT ĐỒNG LOẠT BẢNG ĐIỂM RỔ DANH MỤC", use_container_width=True)
     
