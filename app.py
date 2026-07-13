@@ -61,7 +61,28 @@ def fetch_data_mac(symbol, show_error=True):
         if show_error:
             st.error(f"[-] Lỗi kết nối hệ thống với mã {symbol}: {e}")
         return None
-
+        
+def fetch_data_pure(symbol, start_date, end_date):
+    """Hàm tải dữ liệu thuần túy, an toàn tuyệt đối khi chạy đa luồng (Không gọi st.*)"""
+    try:
+        from vnstock.ui import Market
+        mkt = Market()
+        df = mkt.equity(symbol).ohlcv(start=start_date, end=end_date)
+        
+        if df is None or df.empty:
+            return None
+            
+        # Copy để tránh lỗi ghi đè vùng nhớ chéo giữa các luồng
+        df = df.copy()
+        df.rename(columns={'time': 'Date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        
+        # Sắp xếp thời gian từ cũ đến mới để các chỉ báo (SAR, MACD...) tính toán chính xác
+        df.sort_index(ascending=True, inplace=True)
+        return df
+    except Exception:
+        return None
 def compute_signals(df):
     """Hàm lõi chuyên tính toán toán học và trả về bộ chỉ báo + điểm số kỹ thuật (Không render UI)"""
     try:
@@ -505,10 +526,15 @@ with tab2:
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Đóng gói tác vụ của 1 mã CP vào một hàm nhỏ để giao cho luồng (thread) xử lý
+            # Chuẩn bị sẵn khoảng thời gian ở luồng chính
+            end_date = str(datetime.now().date())
+            start_date = str((datetime.now() - timedelta(days=365)).date())
+            
+            # Hàm xử lý cho từng mã cổ phiếu trong luồng phụ
             def process_single_ticker(ticker):
-                df_ticker = fetch_data_mac(ticker, show_error=False)
-                if df_ticker is not None:
+                # Gọi hàm PURE không chứa st.* để đảm bảo an toàn bộ nhớ tầng C
+                df_ticker = fetch_data_pure(ticker, start_date, end_date)
+                if df_ticker is not None and not df_ticker.empty:
                     res_ticker = compute_signals(df_ticker)
                     if res_ticker:
                         return {
@@ -518,27 +544,24 @@ with tab2:
                             "TỔNG ĐIỂM": res_ticker['total_score'],
                             "Khuyến Nghị Tác Chiến": res_ticker['final_action']
                         }
-                # Nếu lỗi mạng hoặc lỗi tính toán
                 return {
-                    "Mã CP": ticker, "Giá đóng cửa": "N/A", "Điểm Gốc": 0, "TỔNG ĐIỂM": -99, "Khuyến Nghị Tác Chiến": "⚠️ Lỗi kết nối / dữ liệu"
+                    "Mã CP": ticker, "Giá đóng cửa": "N/A", "Điểm Gốc": 0, "TỔNG ĐIỂM": -99, "Khuyến Nghị Tác Chiến": "⚠️ Lỗi kết nối / Dữ liệu trống"
                 }
 
-            # KÍCH HOẠT ĐA LUỒNG (Mở 5 luồng chạy song song cùng lúc)
+            # KÍCH HOẠT ĐA LUỒNG AN TOÀN
             total_tickers = len(st.session_state.watchlist)
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                # Gửi toàn bộ mã CP cho 5 luồng xử lý
                 future_to_ticker = {executor.submit(process_single_ticker, t): t for t in st.session_state.watchlist}
                 
-                # Gom kết quả ngay khi có bất kỳ luồng nào chạy xong 1 mã
                 for idx, future in enumerate(concurrent.futures.as_completed(future_to_ticker)):
                     ticker = future_to_ticker[future]
                     try:
                         result = future.result()
                         bulk_results.append(result)
-                    except Exception as exc:
+                    except Exception:
                         pass
                     
-                    # Cập nhật thanh tiến trình mượt mà
+                    # Cập nhật tiến trình hiển thị (chỉ chạy ở luồng chính Streamlit nên an toàn)
                     percent_complete = (idx + 1) / total_tickers
                     progress_bar.progress(percent_complete)
                     status_text.text(f"⚡ Đã quét xong: {ticker} ({idx+1}/{total_tickers})")
