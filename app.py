@@ -83,15 +83,19 @@ def fetch_data_pure(symbol, start_date, end_date):
         return df
     except Exception:
         return None
-def compute_signals(df):
+ddef compute_signals(df):
     """Hàm lõi chuyên tính toán toán học và trả về bộ chỉ báo + điểm số kỹ thuật (Không render UI)"""
     try:
+        # Kiểm tra đủ số lượng nến để tính mây Ichimoku (52 phiên)
+        if df is None or df.empty or len(df) < 52:
+            return None
+
         # 1. Tính toán các chỉ báo bằng pandas-ta-classic
         bbands = df.ta.bbands(length=20, std=2)
         rsi = df.ta.rsi(length=14)
         macd = df.ta.macd(fast=12, slow=26, signal=9)
         psar = df.ta.psar(af0=0.02, af=0.02, max_af=0.2)
-        ichi_df = df.ta.ichimoku(tenkan=9, kijun=26, senkou=52) # Đã sửa không unpack
+        ichi_df = df.ta.ichimoku(tenkan=9, kijun=26, senkou=52)[0] if isinstance(df.ta.ichimoku(tenkan=9, kijun=26, senkou=52), tuple) else df.ta.ichimoku(tenkan=9, kijun=26, senkou=52)
         
         if bbands is None or rsi is None or macd is None or psar is None or ichi_df is None:
             return None
@@ -133,7 +137,7 @@ def compute_signals(df):
         rsi_col = [c for c in df.columns if c.upper().startswith('RSI')][0]
         
         macd_col = [c for c in df.columns if c.upper().startswith('MACD_') and not c.upper().endswith('H') and not c.upper().endswith('S')][0]
-        macds_col = [c for c in df.columns if c.upper().startswith('MACDS_') or c.upper().startswith('MACD') and c.upper().endswith('S')][0]
+        macds_col = [c for c in df.columns if c.upper().startswith('MACDS_') or (c.upper().startswith('MACD') and c.upper().endswith('S'))][0]
         
         psarl_col = [c for c in df.columns if c.upper().startswith('PSARL')][0]
         psars_col = [c for c in df.columns if c.upper().startswith('PSARS')][0]
@@ -339,21 +343,47 @@ def compute_signals(df):
 
         total_score = base_score + vol_kicker_score
         
-        if 6 <= total_score <= 9:
-            final_action, alert_type = "🟩 MUA MẠNH (Strong Buy)", "success"
-            final_meaning = "Đồng thuận xu hướng tăng tuyệt đối. Các chỉ báo lớn vào phom, động lượng mạnh, có dòng tiền lớn xác nhận."
-        elif 2 <= total_score <= 5:
-            final_action, alert_type = "🟨 MUA THĂM DÒ / GIỮ (Buy/Hold)", "info"
-            final_meaning = "Xu hướng dịch chuyển sang tăng nhưng có thể đang thiếu volume hoặc gặp cản nhẹ. Phù hợp mua rải hoặc nắm giữ."
-        elif -1 <= total_score <= 1:
-            final_action, alert_type = "⬜ ĐỨNG NGOÀI THEO DÕI (Neutral)", "warning"
-            final_meaning = "Các chỉ báo triệt tiêu lẫn nhau hoặc cổ phiếu đang đi ngang tích lũy không rõ xu hướng."
-        elif -5 <= total_score <= -2:
-            final_action, alert_type = "🟨 HẠ TỶ TRỌNG / NGỪNG MUA (Weak Sell)", "error"
-            final_meaning = "Xu hướng ngắn hạn bắt đầu suy yếu, chớm thủng các mốc hỗ trợ. Tuyệt đối không gia tăng vị thế mua mới."
+        # --- PHÂN LOẠI KHUYẾN NGHỊ TÁC CHIẾN THEO THANG ĐIỂM CHUẨN ---
+        if total_score >= 6.0:
+            final_action = "🚀 SIÊU SÓNG (Strong Buy)"
+            alert_type = "success"
+            final_meaning = "Đồng thuận 100% giữa Xu hướng & Dòng tiền | MUA CHỦ ĐỘNG / Mua gia tăng tối đa tỷ trọng"
+        elif total_score >= 3.5:
+            final_action = "📈 TĂNG TRƯỞNG (Buy)"
+            alert_type = "info"
+            final_meaning = "Xu hướng tăng rõ nét, đa số chỉ báo ủng hộ | MUA THĂM DÒ / Mua khi có nhịp Rút chân (Pullback)"
+        elif total_score >= -1.0:
+            final_action = "🎯 TÍCH LŨY / TRUNG TÍNH (Watch)"
+            alert_type = "warning"
+            final_meaning = "Giằng co Sideway hoặc Xung đột ngắn - trung hạn | RÌNH MUA (Đưa vào Watchlist chờ nổ Vol/BB)"
+        elif total_score >= -4.0:
+            final_action = "⚠️ SUY YẾU (Caution)"
+            alert_type = "error"
+            final_meaning = "Cảnh báo vi phạm hỗ trợ ngắn hạn (MA20/Kijun) | HẠ TỶ TRỌNG / Ngừng mua mới hoàn toàn"
         else:
-            final_action, alert_type = "🟥 BÁN QUYẾT LIỆT (Strong Sell)", "error"
-            final_meaning = "Kích hoạt trạng thái quản trị rủi ro tối đa. Gãy xu hướng đồng loạt trên nhiều chỉ báo mạnh đi kèm vol lớn."
+            final_action = "🔴 BÁN MẠNH (Strong Sell)"
+            alert_type = "error"
+            final_meaning = "Xu hướng giảm đồng loạt, bám biên dưới BB | BÁN DỨT KHÁT / Cắt lỗ, đứng ngoài bảo toàn vốn"
+        
+        # Đóng gói toàn bộ kết quả vào Dictionary
+        return {
+            "trade_date": df.index[-1].strftime('%Y-%m-%d'),
+            "close_curr": close_curr,
+            "base_score": base_score,
+            "total_score": total_score,
+            "final_action": final_action,
+            "alert_type": alert_type,
+            "final_meaning": final_meaning,
+            "bb_signal": bb_signal, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, "bb_reason": bb_reason, "bb_score": bb_score,
+            "rsi_signal": rsi_signal, "rsi_curr": rsi_curr, "rsi_reason": rsi_reason, "rsi_score": rsi_score,
+            "macd_signal": macd_signal, "macd_curr": macd_curr, "macds_curr": macds_curr, "macd_reasons": macd_reasons, "macd_score": macd_score,
+            "sar_signal": sar_signal, "sar_val": sar_val, "sar_reason": sar_reason, "sar_score": sar_score,
+            "ichi_signal": ichi_signal, "tenkan_curr": tenkan_curr, "kijun_curr": kijun_curr, "kumo_bottom": kumo_bottom, "kumo_top": kumo_top, "ichi_reason": ichi_reason, "ichi_score": ichi_score,
+            "vpvr_signal": vpvr_signal, "poc_price": poc_price, "poc_bottom": poc_bottom, "poc_top": poc_top, "vpvr_reason": vpvr_reason, "vpvr_score": vpvr_score,
+            "vol_kicker_signal": vol_kicker_signal, "vol_curr": vol_curr, "vol_ma20_curr": vol_ma20_curr, "vol_kicker_reason": vol_kicker_reason, "vol_kicker_score": vol_kicker_score
+        }
+    except Exception as e:
+        return None
 
         # Đóng gói toàn bộ kết quả vào một Dictionary
         return {
