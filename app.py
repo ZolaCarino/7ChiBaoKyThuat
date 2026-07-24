@@ -83,7 +83,7 @@ def fetch_data_pure(symbol, start_date, end_date):
         return df
     except Exception:
         return None
-ddef compute_signals(df):
+def compute_signals(df):
     """Hàm lõi chuyên tính toán toán học và trả về bộ chỉ báo + điểm số kỹ thuật (Không render UI)"""
     try:
         # Kiểm tra đủ số lượng nến để tính mây Ichimoku (52 phiên)
