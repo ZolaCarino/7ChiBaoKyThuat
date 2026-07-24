@@ -152,13 +152,11 @@ def compute_signals(df):
         bbu_curr = safe_val(bbu_col, -1)
         
         # Tính toán thông số phục vụ Bollinger Bands nâng cấp
-        # Bandwidth (BW) = (BBU - BBL) / BBM
         bw_series = (df[bbu_col] - df[bbl_col]) / df[bbm_col]
         bw_curr = float(bw_series.iloc[-1])
         bw_prev = float(bw_series.iloc[-2])
         bw_min_20 = float(bw_series.iloc[-20:].min())
         
-        # %B = (Close - BBL) / (BBU - BBL)
         pct_b_curr = (close_curr - bbl_curr) / (bbu_curr - bbl_curr) if (bbu_curr - bbl_curr) != 0 else 0.5
         
         vol_ma20_series = volume_series.rolling(window=20).mean()
@@ -185,34 +183,40 @@ def compute_signals(df):
         # ==========================================
         bb_score = 0.0
         bb_status = "Trung tính (SideWay / Theo dõi)"
+        bb_desc = "Giá biến động an toàn trong dải, chưa xuất hiện tín hiệu thắt chặt hay mở dải rõ rệt."
 
         # ƯU TIÊN 1: Bùng nổ Siêu Tốc (Breakout)
         if (bw_curr > 1.15 * bw_prev) and (pct_b_curr >= 0.85) and (vol_curr >= 1.5 * vol_ma20_curr):
             bb_score = 2.0
             bb_status = "Bùng nổ dòng tiền (Breakout 🚀)"
+            bb_desc = f"Giá áp sát / bám sát biên trên (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng mạnh (+{((bw_curr/bw_prev)-1)*100:.1f}%) kết hợp Volume bùng nổ ({vol_curr/vol_ma20_curr:.1f}x MA20) -> Xác nhận sóng tăng Siêu Tốc."
 
         # ƯU TIÊN 2: Mở dải Bán tháo (Walking Lower)
         elif (bw_curr > 1.15 * bw_prev) and (pct_b_curr <= 0.15) and (vol_curr >= 1.2 * vol_ma20_curr):
             bb_score = -2.0
             bb_status = "Mở dải giảm mạnh (Walking Lower 🔴)"
+            bb_desc = f"Giá cắm sâu tiệm cận biên dưới (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng xuống dưới đi kèm Volume bán gia tăng -> Tín hiệu xả hàng / mở rộng đà rơi."
 
         # ƯU TIÊN 3: Tích lũy Siết dải (Squeeze)
         elif (bw_curr <= 1.10 * bw_min_20) and (0.40 <= pct_b_curr <= 0.60):
             bb_score = 1.0
             bb_status = "Tích lũy chặt (Squeeze 🎯)"
+            bb_desc = f"Dải BB siết chặt ở mức thấp nhất 20 phiên, giá dao động ổn định quanh trục giữa MA20 (%B = {pct_b_curr*100:.1f}%) -> Lực nén tích lũy rất mạnh, sẵn sàng chờ điểm nổ."
 
         # ƯU TIÊN 4: Sóng tăng bền vững
         elif (0.60 <= pct_b_curr < 0.85) and (bbm_curr > bbm_prev) and (vol_curr >= 1.0 * vol_ma20_curr):
             bb_score = 1.0
             bb_status = "Sóng tăng ổn định (Bullish 📈)"
+            bb_desc = f"Giá duy trì thế dốc lên nằm trên MA20 (%B = {pct_b_curr*100:.1f}%), đường giữa MA20 hướng lên rõ nét và Volume ở mức khá -> Xu hướng tăng trưởng bền vững."
 
         # ƯU TIÊN 5: Suy yếu / Mất mốc MA20
         elif (pct_b_curr < 0.40) or (close_curr < bbm_curr):
             bb_score = -1.0
             bb_status = "Thủng hỗ trợ MA20 (Weak ⚠️)"
+            bb_desc = f"Giá rơi xuống dưới đường giữa MA20 hoặc lùi sâu về sát biên dưới (%B = {pct_b_curr*100:.1f}%) -> Trạng thái kỹ thuật ngắn hạn bị suy yếu."
 
         bb_signal = bb_status
-        bb_reason = f"Thang điểm BB Nâng cấp: {bb_score}đ | %B = {round(pct_b_curr, 2)} | Độ nở dải BW = {round(bw_curr, 3)}"
+        bb_reason = bb_desc
 
         # --- KHẢO SÁT CHỈ BÁO 2: RSI (Thang điểm chuẩn: -1.0 đến +1.0) ---
         rsi_score = 0.0
@@ -273,7 +277,6 @@ def compute_signals(df):
         if not macd_reasons:
             macd_reasons.append("Đường MACD và Tín hiệu đi ngang ổn định.")
 
-        # Khống chế giới hạn MACD [-1.5, +1.5]
         macd_score = max(-1.5, min(1.5, macd_score))
 
         # --- KHẢO SÁT CHỈ BÁO 4: PARABOLIC SAR (Thang điểm chuẩn: -1.0 đến +1.0) ---
@@ -352,7 +355,7 @@ def compute_signals(df):
             vpvr_signal = "BÁN (Sell 📉)"
             vpvr_reason = f"Giá đóng cửa ({close_curr:,}) thủng xuống DƯỚI vùng POC ({poc_bottom:,.1f})"
 
-        # --- VOLUME KICKER (Thang điểm chuẩn: 0.0 đến +1.5) ---
+        # --- VOLUME KICKER ---
         vol_kicker_score = 0.0
         vol_kicker_signal = "KHÔNG KÍCH HOẠT"
         vol_kicker_reason = "Khối lượng chưa chạm mốc bùng nổ dòng tiền."
@@ -366,13 +369,9 @@ def compute_signals(df):
             vol_kicker_signal = "DÒNG TIỀN VÀO TÍCH CỰC (Vol Kicker +1.0 🟢)"
             vol_kicker_reason = f"Vol phiên nay ({vol_curr:,.0f}) >= 1.2x Vol MA20 ({vol_ma20_curr:,.0f}) -> Dòng tiền chớm gia tăng."
 
-        # TÍNH TỔNG ĐIỂM
         base_score = round(bb_score + rsi_score + macd_score + sar_score + ichi_score + vpvr_score, 1)
         total_score = round(base_score + vol_kicker_score, 1)
 
-        # ==========================================
-        # ĐIỀU 4: CẬP NHẬT TỔNG QUAN CÁC NGƯỠNG ĐIỂM VÀ KHUYẾN NGHỊ
-        # ==========================================
         if total_score >= 6.0:
             final_action = "🚀 SIÊU SÓNG (Strong Buy)"
             alert_type = "success"
@@ -389,12 +388,11 @@ def compute_signals(df):
             final_action = "⚠️ SUY YẾU (Caution)"
             alert_type = "error"
             final_meaning = "Cảnh báo vi phạm hỗ trợ ngắn hạn (MA20/Kijun) | HẠ TỶ TRỌNG / Ngừng mua mới hoàn toàn"
-        else: # <= -4.5
+        else:
             final_action = "🔴 BÁN MẠNH (Strong Sell)"
             alert_type = "error"
             final_meaning = "Xu hướng giảm đồng loạt, bám biên dưới BB | BÁN DỨT KHÁT / Cắt lỗ, đứng ngoài bảo toàn vốn"
 
-        # Đóng gói toàn bộ kết quả
         return {
             "trade_date": df.index[-1].strftime('%Y-%m-%d'),
             "close_curr": close_curr,
@@ -403,7 +401,8 @@ def compute_signals(df):
             "final_action": final_action,
             "alert_type": alert_type,
             "final_meaning": final_meaning,
-            "bb_signal": bb_signal, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, "bb_reason": bb_reason, "bb_score": bb_score,
+            "bb_signal": bb_signal, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, 
+            "bb_reason": bb_reason, "bb_score": bb_score, "pct_b_curr": pct_b_curr, "bw_curr": bw_curr,
             "rsi_signal": rsi_signal, "rsi_curr": rsi_curr, "rsi_reason": rsi_reason, "rsi_score": rsi_score,
             "macd_signal": macd_signal, "macd_curr": macd_curr, "macds_curr": macds_curr, "macd_reasons": macd_reasons, "macd_score": macd_score,
             "sar_signal": sar_signal, "sar_val": sar_val, "sar_reason": sar_reason, "sar_score": sar_score,
@@ -420,24 +419,29 @@ def render_detailed_report(res, symbol):
     st.subheader(f"🎯 Kết quả phân tích: {symbol}")
     st.caption(f"Phiên giao dịch: **{res['trade_date']}** | Giá đóng cửa: **{res['close_curr']:,}**")
     
-    # Hiển thị Khuyến nghị Tổng hợp nổi bật
     if res['alert_type'] == "success": st.success(f"**{res['final_action']}** \n\n *Chiến thuật tác chiến:* {res['final_meaning']}")
     elif res['alert_type'] == "info": st.info(f"**{res['final_action']}** \n\n *Chiến thuật tác chiến:* {res['final_meaning']}")
     elif res['alert_type'] == "warning": st.warning(f"**{res['final_action']}** \n\n *Chiến thuật tác chiến:* {res['final_meaning']}")
     else: st.error(f"**{res['final_action']}** \n\n *Chiến thuật tác chiến:* {res['final_meaning']}")
 
-    # Cột hiển thị điểm nhanh
     col1, col2 = st.columns(2)
     col1.metric("Điểm kỹ thuật gốc", f"{res['base_score']} đ")
     col2.metric("TỔNG ĐIỂM HỆ THỐNG", f"{res['total_score']} đ")
 
     st.markdown("### 📋 Chi tiết các chỉ báo kỹ thuật")
 
+    # =========================================================
+    # TRÌNH BÀY MỚI TRỰC QUAN CHO BOLLINGER BANDS (EXPANDER)
+    # =========================================================
     with st.expander("📈 Bollinger Bands (Nâng cấp)"):
-        st.write(f"- **Trạng thái:** {res['bb_signal']}")
-        st.write(f"- **Mốc BB:** Biên Trên: `{round(res['bbu_curr'],1)}` | Đường Giữa: `{round(res['bbm_curr'],1)}` | Biên Dưới: `{round(res['bbl_curr'],1)}`")
-        st.write(f"- **Chi tiết:** {res['bb_reason']}")
-        st.write(f"- **Điểm số:** `{res['bb_score']}`")
+        st.write(f"- **Trạng thái:** `{res['bb_signal']}`")
+        st.write(f"- **Khung giá dải BB:** Biên trên `{round(res['bbu_curr'],1)}` | MA20 `{round(res['bbm_curr'],1)}` | Biên dưới `{round(res['bbl_curr'],1)}`")
+        
+        st.markdown("**Đánh giá tương quan vị trí & biến động:**")
+        st.write(f"  + **Mô tả kỹ thuật:** {res['bb_reason']}")
+        st.write(f"  + **Vị trí tương quan (%B):** `{res['pct_b_curr']*100:.1f}%` *(>85%: Bám biên trên | <15%: Bám biên dưới | ~50%: Trục MA20)*")
+        st.write(f"  + **Độ nở dải (Bandwidth):** `{round(res['bw_curr'], 3)}` *(Đo lường độ nén tích lũy hoặc độ bung biến động)*")
+        st.write(f"- **Điểm số xếp hạng:** `{res['bb_score']} đ`")
 
     with st.expander("📉 Chỉ báo động lượng RSI(14)"):
         st.write(f"- **Trạng thái:** {res['rsi_signal']}")
