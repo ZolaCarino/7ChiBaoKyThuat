@@ -159,6 +159,19 @@ def compute_signals(df):
         
         pct_b_curr = (close_curr - bbl_curr) / (bbu_curr - bbl_curr) if (bbu_curr - bbl_curr) != 0 else 0.5
         
+        # --- ĐÁNH GIÁ MỨC ĐỘ ĐÓNG / MỞ CỦA BANDWIDTH ---
+        bw_change_ratio = (bw_curr / bw_prev) if bw_prev != 0 else 1.0
+        if bw_curr <= 1.10 * bw_min_20:
+            bw_desc_status = "Đang thắt chặt rất mạnh (Squeeze - Tích lũy cực nén)"
+        elif bw_change_ratio >= 1.15:
+            bw_desc_status = "Đang mở dải mạnh (Bùng nổ biến động)"
+        elif bw_change_ratio > 1.03:
+            bw_desc_status = "Đang chớm mở rộng (Biến động gia tăng)"
+        elif bw_change_ratio < 0.97:
+            bw_desc_status = "Đang co hẹp dần (Thu hẹp biến động)"
+        else:
+            bw_desc_status = "Đang đi ngang ổn định (Biến động trung bình)"
+        
         vol_ma20_series = volume_series.rolling(window=20).mean()
         vol_curr = safe_val('Volume', -1)
         vol_ma20_curr = float(vol_ma20_series.iloc[-1])
@@ -179,7 +192,7 @@ def compute_signals(df):
         isb_curr = safe_val(isb_col, -1)
 
         # ==========================================
-        # ĐIỀU 1: CẬP NHẬT CHỈ BÁO BOLLINGER BANDS NÂNG CẤP
+        # BOLLINGER BANDS RULE MATRIX
         # ==========================================
         bb_score = 0.0
         bb_status = "Trung tính (SideWay / Theo dõi)"
@@ -218,7 +231,7 @@ def compute_signals(df):
         bb_signal = bb_status
         bb_reason = bb_desc
 
-        # --- KHẢO SÁT CHỈ BÁO 2: RSI (Thang điểm chuẩn: -1.0 đến +1.0) ---
+        # --- RSI ---
         rsi_score = 0.0
         rsi_signal = "TRUNG TÍNH"
         rsi_reason = "RSI đang biến động ở vùng an toàn, chưa vi phạm quá mua/quá bán"
@@ -239,7 +252,7 @@ def compute_signals(df):
             rsi_signal = "TIÊU CỰC (Bearish)"
             rsi_reason = "RSI cắt xuống mốc trung vị 50 -> Phe Bán đang kiểm soát thế trận"
 
-        # --- KHẢO SÁT CHỈ BÁO 3: MACD (Thang điểm chuẩn: -1.5 đến +1.5) ---
+        # --- MACD ---
         macd_score = 0.0
         macd_signal = "TRUNG TÍNH"
         macd_reasons = []
@@ -279,7 +292,7 @@ def compute_signals(df):
 
         macd_score = max(-1.5, min(1.5, macd_score))
 
-        # --- KHẢO SÁT CHỈ BÁO 4: PARABOLIC SAR (Thang điểm chuẩn: -1.0 đến +1.0) ---
+        # --- PARABOLIC SAR ---
         sar_score, sar_signal, sar_reason, sar_val = 0.0, "TRUNG TÍNH", "Không xác định rõ trạng thái.", 0.0
         psarl_series = df[psarl_col].iloc[:, 0] if isinstance(df[psarl_col], pd.DataFrame) else df[psarl_col]
         psars_series = df[psars_col].iloc[:, 0] if isinstance(df[psars_col], pd.DataFrame) else df[psars_col]
@@ -313,7 +326,7 @@ def compute_signals(df):
                 sar_signal = "BÁN CHỚM (Early Bearish 🔴)"
                 sar_reason = f"Xuất hiện {consecutive_s} chấm SAR đầu tiên TRÊN đường giá -> Rủi ro đảo chiều giảm sớm."
 
-        # --- KHẢO SÁT CHỈ BÁO 5: ICHIMOKU (Thang điểm chuẩn: -2.0 đến +2.0) ---
+        # --- ICHIMOKU ---
         ichi_score, ichi_signal, ichi_reason = 0.0, "TRUNG TÍNH", ""
         kumo_top = max(isa_curr, isb_curr)
         kumo_bottom = min(isa_curr, isb_curr)
@@ -342,7 +355,7 @@ def compute_signals(df):
                     ichi_signal = "TIÊU CỰC (Below Kumo)"
                     ichi_reason = "Giá nằm DƯỚI mây Kumo nhưng đường Tenkan và Kijun chưa có giao cắt mới."
 
-        # --- KHẢO SÁT CHỈ BÁO 6: VOLUME PROFILE (VPVR) ---
+        # --- VOLUME PROFILE ---
         vpvr_score = 0.0
         vpvr_signal = "THEO DÕI"
         vpvr_reason = f"Giá đi ngang ngay trong vùng biên của dải POC ({poc_bottom:,.1f} - {poc_top:,.1f})"
@@ -403,6 +416,7 @@ def compute_signals(df):
             "final_meaning": final_meaning,
             "bb_signal": bb_signal, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, 
             "bb_reason": bb_reason, "bb_score": bb_score, "pct_b_curr": pct_b_curr, "bw_curr": bw_curr,
+            "bw_desc_status": bw_desc_status,
             "rsi_signal": rsi_signal, "rsi_curr": rsi_curr, "rsi_reason": rsi_reason, "rsi_score": rsi_score,
             "macd_signal": macd_signal, "macd_curr": macd_curr, "macds_curr": macds_curr, "macd_reasons": macd_reasons, "macd_score": macd_score,
             "sar_signal": sar_signal, "sar_val": sar_val, "sar_reason": sar_reason, "sar_score": sar_score,
@@ -431,7 +445,7 @@ def render_detailed_report(res, symbol):
     st.markdown("### 📋 Chi tiết các chỉ báo kỹ thuật")
 
     # =========================================================
-    # TRÌNH BÀY MỚI TRỰC QUAN CHO BOLLINGER BANDS (EXPANDER)
+    # TRÌNH BÀY MỚI HIỂN THỊ TRẠNG THÁI NÉN / MỞ CHO BANDWIDTH
     # =========================================================
     with st.expander("📈 Bollinger Bands (Nâng cấp)"):
         st.write(f"- **Trạng thái:** `{res['bb_signal']}`")
@@ -440,7 +454,7 @@ def render_detailed_report(res, symbol):
         st.markdown("**Đánh giá tương quan vị trí & biến động:**")
         st.write(f"  + **Mô tả kỹ thuật:** {res['bb_reason']}")
         st.write(f"  + **Vị trí tương quan (%B):** `{res['pct_b_curr']*100:.1f}%` *(>85%: Bám biên trên | <15%: Bám biên dưới | ~50%: Trục MA20)*")
-        st.write(f"  + **Độ nở dải (Bandwidth):** `{round(res['bw_curr'], 3)}` *(Đo lường độ nén tích lũy hoặc độ bung biến động)*")
+        st.write(f"  + **Độ nở dải (Bandwidth):** `{round(res['bw_curr'], 3)}` ➡️ **{res['bw_desc_status']}**")
         st.write(f"- **Điểm số xếp hạng:** `{res['bb_score']} đ`")
 
     with st.expander("📉 Chỉ báo động lượng RSI(14)"):
