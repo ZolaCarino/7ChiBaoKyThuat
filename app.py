@@ -4,7 +4,6 @@ import pandas_ta_classic as ta
 from vnstock.ui import Market
 from datetime import datetime, timedelta
 import concurrent.futures
-
 import os
 
 WATCHLIST_FILE = "watchlist.txt"
@@ -72,17 +71,15 @@ def fetch_data_pure(symbol, start_date, end_date):
         if df is None or df.empty:
             return None
             
-        # Copy để tránh lỗi ghi đè vùng nhớ chéo giữa các luồng
         df = df.copy()
         df.rename(columns={'time': 'Date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
-        
-        # Sắp xếp thời gian từ cũ đến mới để các chỉ báo (SAR, MACD...) tính toán chính xác
         df.sort_index(ascending=True, inplace=True)
         return df
     except Exception:
         return None
+
 def compute_signals(df):
     """
     Hàm tính toán tổng hợp 6 chỉ báo kỹ thuật theo hệ trọng số chuẩn [-7.5 đến +9.0].
@@ -287,7 +284,7 @@ def compute_signals(df):
             alert_type = "error"
             final_meaning = "Xu hướng giảm đồng loạt, bám biên dưới BB | BÁN DỨT KHÁT / Cắt lỗ, đứng ngoài bảo toàn vốn"
 
-        # Đóng gói Dictionary (Tích hợp đủ khóa cho cả logic cũ và UI Render)
+        # Đóng gói Dictionary (Đầy đủ khóa cho UI Render)
         return {
             "trade_date": df.index[-1].strftime('%Y-%m-%d'),
             "close_curr": close_curr,
@@ -297,73 +294,35 @@ def compute_signals(df):
             "alert_type": alert_type,
             "final_meaning": final_meaning,
             
-            # Khóa chỉ báo phục vụ hiển thị chi tiết UI
+            # BB
             "bb_score": bb_score, "bb_signal": bb_status, "bb_status": bb_status, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, "bb_reason": bb_status,
+            # Ichimoku
             "ichi_score": ichi_score, "ichi_signal": ichi_status, "ichi_status": ichi_status, "tenkan_curr": tenkan_curr, "kijun_curr": kijun_curr, "kumo_bottom": cloud_bottom, "kumo_top": cloud_top, "ichi_reason": ichi_status,
+            # MACD
             "macd_score": macd_score, "macd_signal": macd_status, "macd_status": macd_status, "macd_curr": macd_val, "macds_curr": signal_val, "macd_reasons": [macd_status],
+            # RSI
             "rsi_score": rsi_score, "rsi_signal": rsi_status, "rsi_status": rsi_status, "rsi_curr": rsi_curr, "rsi_reason": rsi_status,
-            "psar_score": psar_score, "sar_signal": psar_status, "psar_status": psar_status, "sar_val": sar_val, "sar_reason": psar_status,
+            # Parabolic SAR (Bổ sung cả sar_score lẫn psar_score)
+            "psar_score": psar_score, "sar_score": psar_score, "sar_signal": psar_status, "psar_status": psar_status, "sar_val": sar_val, "sar_reason": psar_status,
+            # Volume Kicker
             "vol_score": vol_score, "vol_kicker_score": vol_score, "vol_kicker_signal": vol_status, "vol_status": vol_status, "vol_curr": vol_curr, "vol_ma20_curr": vol_ma20_curr, "vol_kicker_reason": vol_status,
-            
-            # VPVR (Thiết lập mặc định để giữ UI tương thích)
+            # VPVR (Giữ UI tương thích)
             "vpvr_signal": "TRUNG TÍNH", "poc_price": close_curr, "poc_bottom": close_curr * 0.995, "poc_top": close_curr * 1.005, "vpvr_reason": "Đã tích hợp vào hệ thống 6 chỉ báo chuẩn", "vpvr_score": 0.0
         }
     except Exception:
         return None
-        
-        # Đóng gói toàn bộ kết quả vào Dictionary
-        return {
-            "trade_date": df.index[-1].strftime('%Y-%m-%d'),
-            "close_curr": close_curr,
-            "base_score": base_score,
-            "total_score": total_score,
-            "final_action": final_action,
-            "alert_type": alert_type,
-            "final_meaning": final_meaning,
-            "bb_signal": bb_signal, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, "bb_reason": bb_reason, "bb_score": bb_score,
-            "rsi_signal": rsi_signal, "rsi_curr": rsi_curr, "rsi_reason": rsi_reason, "rsi_score": rsi_score,
-            "macd_signal": macd_signal, "macd_curr": macd_curr, "macds_curr": macds_curr, "macd_reasons": macd_reasons, "macd_score": macd_score,
-            "sar_signal": sar_signal, "sar_val": sar_val, "sar_reason": sar_reason, "sar_score": sar_score,
-            "ichi_signal": ichi_signal, "tenkan_curr": tenkan_curr, "kijun_curr": kijun_curr, "kumo_bottom": kumo_bottom, "kumo_top": kumo_top, "ichi_reason": ichi_reason, "ichi_score": ichi_score,
-            "vpvr_signal": vpvr_signal, "poc_price": poc_price, "poc_bottom": poc_bottom, "poc_top": poc_top, "vpvr_reason": vpvr_reason, "vpvr_score": vpvr_score,
-            "vol_kicker_signal": vol_kicker_signal, "vol_curr": vol_curr, "vol_ma20_curr": vol_ma20_curr, "vol_kicker_reason": vol_kicker_reason, "vol_kicker_score": vol_kicker_score
-        }
-    except Exception as e:
-        return None
-
-        # Đóng gói toàn bộ kết quả vào một Dictionary
-        return {
-            "trade_date": df.index[-1].strftime('%Y-%m-%d'),
-            "close_curr": close_curr,
-            "base_score": base_score,
-            "total_score": total_score,
-            "final_action": final_action,
-            "alert_type": alert_type,
-            "final_meaning": final_meaning,
-            "bb_signal": bb_signal, "bbu_curr": bbu_curr, "bbm_curr": bbm_curr, "bbl_curr": bbl_curr, "bb_reason": bb_reason, "bb_score": bb_score,
-            "rsi_signal": rsi_signal, "rsi_curr": rsi_curr, "rsi_reason": rsi_reason, "rsi_score": rsi_score,
-            "macd_signal": macd_signal, "macd_curr": macd_curr, "macds_curr": macds_curr, "macd_reasons": macd_reasons, "macd_score": macd_score,
-            "sar_signal": sar_signal, "sar_val": sar_val, "sar_reason": sar_reason, "sar_score": sar_score,
-            "ichi_signal": ichi_signal, "tenkan_curr": tenkan_curr, "kijun_curr": kijun_curr, "kumo_bottom": kumo_bottom, "kumo_top": kumo_top, "ichi_reason": ichi_reason, "ichi_score": ichi_score,
-            "vpvr_signal": vpvr_signal, "poc_price": poc_price, "poc_bottom": poc_bottom, "poc_top": poc_top, "vpvr_reason": vpvr_reason, "vpvr_score": vpvr_score,
-            "vol_kicker_signal": vol_kicker_signal, "vol_curr": vol_curr, "vol_ma20_curr": vol_ma20_curr, "vol_kicker_reason": vol_kicker_reason, "vol_kicker_score": vol_kicker_score
-        }
-    except Exception as e:
-        return None
 
 def render_detailed_report(res, symbol):
-    """Hàm chuyên render giao diện đồ họa chi tiết từng Expander của một mã cổ phiếu cụ thể"""
+    """Hàm render giao diện đồ họa chi tiết từng Expander của một mã cổ phiếu cụ thể"""
     st.markdown("---")
     st.subheader(f"🎯 Kết quả phân tích: {symbol}")
     st.caption(f"Phiên giao dịch: **{res['trade_date']}** | Giá đóng cửa: **{res['close_curr']:,}**")
     
-    # Hiển thị Khuyến nghị Tổng hợp nổi bật
     if res['alert_type'] == "success": st.success(f"**{res['final_action']}** \n\n *Ý nghĩa chiến thuật:* {res['final_meaning']}")
     elif res['alert_type'] == "info": st.info(f"**{res['final_action']}** \n\n *Ý nghĩa chiến thuật:* {res['final_meaning']}")
     elif res['alert_type'] == "warning": st.warning(f"**{res['final_action']}** \n\n *Ý nghĩa chiến thuật:* {res['final_meaning']}")
     else: st.error(f"**{res['final_action']}** \n\n *Ý nghĩa chiến thuật:* {res['final_meaning']}")
 
-    # Cột hiển thị điểm nhanh
     col1, col2 = st.columns(2)
     col1.metric("Điểm kỹ thuật gốc", f"{res['base_score']} đ")
     col2.metric("TỔNG ĐIỂM (Có Vol Kicker)", f"{res['total_score']} đ")
@@ -419,11 +378,10 @@ def render_detailed_report(res, symbol):
 # ========================================================
 st.title("📊 Hệ Thống Phân Tích Cổ Phiếu Tự Động")
 
-# Phân chia không gian làm việc bằng Tabs thành 2 phần độc lập
 tab1, tab2 = st.tabs(["🔍 Phân Tích Đơn Lẻ", "📋 Rổ Cổ Phiếu Watchlist"])
 
 # --------------------------------------------------------
-# TAB 1: PHÂN TÍCH ĐƠN LẺ (GIỮ NGUYÊN TOÀN BỘ CODE CŨ)
+# TAB 1: PHÂN TÍCH ĐƠN LẺ
 # --------------------------------------------------------
 with tab1:
     st.write("Nhập một mã chứng khoán Việt Nam bên dưới để bóc tách sức mạnh kỹ thuật đa tầng.")
@@ -442,17 +400,15 @@ with tab1:
                     st.error("[-] Không thể tính toán đầy đủ chỉ báo kỹ thuật cho mã này.")
 
 # --------------------------------------------------------
-# TAB 2: TÍNH NĂNG MỞ RỘNG - QUẢN LÝ & QUÉT RỔ 20 MÃ ĐỒNG LOẠT
+# TAB 2: QUẢN LÝ & QUÉT RỔ WATCHLIST
 # --------------------------------------------------------
 with tab2:
     st.subheader("📋 Quản lý Rổ Watchlist (Tối đa 20 mã)")
-    st.write("Thêm hoặc loại bỏ các mã trong danh mục của anh. Hệ thống sẽ quét toàn bộ và xếp hạng.")
+    st.write("Thêm hoặc loại bỏ các mã trong danh mục. Hệ thống sẽ quét toàn bộ và xếp hạng.")
 
-    # KHỞI TẠO TỪ FILE: Thay vì ghi cứng list, ta gọi hàm load_watchlist()
     if "watchlist" not in st.session_state:
         st.session_state.watchlist = load_watchlist()
 
-    # Khung thêm mã mới vào rổ
     col_add1, col_add2 = st.columns([3, 1])
     with col_add1:
         new_ticker = st.text_input("Gõ mã CP mới muốn thêm vào rổ:", value="", key="add_ticker_input").strip().upper()
@@ -461,54 +417,42 @@ with tab2:
         add_btn = st.button("➕ Thêm vào rổ", use_container_width=True)
         if add_btn and new_ticker:
             if new_ticker in st.session_state.watchlist:
-                st.warning(f"Mã {new_ticker} đã tồn tại trong rổ của anh.")
+                st.warning(f"Mã {new_ticker} đã tồn tại trong rổ.")
             elif len(st.session_state.watchlist) >= 20:
-                st.error("Rổ theo dõi đã đầy! Anh vui lòng xoá bớt mã trước khi thêm mới (Tối đa 20 mã).")
+                st.error("Rổ theo dõi đã đầy! Vui lòng xoá bớt mã trước khi thêm mới (Tối đa 20 mã).")
             else:
                 st.session_state.watchlist.append(new_ticker)
-                
-                # CẬP NHẬT: Lưu lại vào file ngay khi thêm mã thành công
                 save_watchlist(st.session_state.watchlist)
-                
                 st.success(f"Đã thêm {new_ticker} thành công!")
                 st.rerun()
 
-    # Khung hiển thị trực quan và xóa nhanh bằng st.multiselect
     selected_watchlist = st.multiselect(
         "Danh sách rổ hiện tại (Bấm vào dấu 'X' để xoá nhanh mã khỏi rổ):",
         options=st.session_state.watchlist,
         default=st.session_state.watchlist
     )
     
-    # Đồng bộ lại bộ nhớ và lưu vào file nếu người dùng click xóa bớt mã bằng dấu X
     if selected_watchlist != st.session_state.watchlist:
         st.session_state.watchlist = selected_watchlist
-        
-        # CẬP NHẬT: Lưu lại vào file ngay khi xoá mã
         save_watchlist(st.session_state.watchlist)
-        
         st.rerun()
 
     st.markdown("---")
         
-    # Nút bấm quét tổng lực rổ cổ phiếu
     run_bulk = st.button("🚀 KÍCH HOẠT QUÉT ĐỒNG LOẠT BẢNG ĐIỂM RỔ DANH MỤC", use_container_width=True)
     
     if run_bulk:
         if not st.session_state.watchlist:
-            st.warning("Rổ danh mục trống, anh vui lòng thêm ít nhất 1 mã để bắt đầu quét.")
+            st.warning("Rổ danh mục trống, vui lòng thêm ít nhất 1 mã để bắt đầu quét.")
         else:
             bulk_results = []
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Chuẩn bị sẵn khoảng thời gian ở luồng chính
             end_date = str(datetime.now().date())
             start_date = str((datetime.now() - timedelta(days=365)).date())
             
-            # Hàm xử lý cho từng mã cổ phiếu trong luồng phụ
             def process_single_ticker(ticker):
-                # Gọi hàm PURE không chứa st.* để đảm bảo an toàn bộ nhớ tầng C
                 df_ticker = fetch_data_pure(ticker, start_date, end_date)
                 if df_ticker is not None and not df_ticker.empty:
                     res_ticker = compute_signals(df_ticker)
@@ -524,7 +468,6 @@ with tab2:
                     "Mã CP": ticker, "Giá đóng cửa": "N/A", "Điểm Gốc": 0, "TỔNG ĐIỂM": -99, "Khuyến Nghị Tác Chiến": "⚠️ Lỗi kết nối / Dữ liệu trống"
                 }
 
-            # KÍCH HOẠT ĐA LUỒNG AN TOÀN
             total_tickers = len(st.session_state.watchlist)
             with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_ticker = {executor.submit(process_single_ticker, t): t for t in st.session_state.watchlist}
@@ -537,7 +480,6 @@ with tab2:
                     except Exception:
                         pass
                     
-                    # Cập nhật tiến trình hiển thị (chỉ chạy ở luồng chính Streamlit nên an toàn)
                     percent_complete = (idx + 1) / total_tickers
                     progress_bar.progress(percent_complete)
                     status_text.text(f"⚡ Đã quét xong: {ticker} ({idx+1}/{total_tickers})")
@@ -545,7 +487,6 @@ with tab2:
             progress_bar.empty()
             status_text.empty()
             
-            # --- RENDER BẢNG ĐIỂM ĐỒNG LOẠT ---
             if bulk_results:
                 df_summary = pd.DataFrame(bulk_results)
                 df_summary = df_summary.sort_values(by="TỔNG ĐIỂM", ascending=False).reset_index(drop=True)
