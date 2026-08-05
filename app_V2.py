@@ -174,7 +174,7 @@ def compute_signals(df):
         
         vol_ma20_series = volume_series.rolling(window=20).mean()
         vol_curr = safe_val('Volume', -1)
-        vol_ma20_curr = float(vol_ma20_series.iloc[-1])
+        vol_ma20_curr = float(vol_ma20_curr_val := vol_ma20_series.iloc[-1])
 
         rsi_curr = safe_val(rsi_col, -1)
         rsi_prev = safe_val(rsi_col, -2)
@@ -192,37 +192,43 @@ def compute_signals(df):
         isb_curr = safe_val(isb_col, -1)
 
         # ==========================================
-        # BOLLINGER BANDS RULE MATRIX
+        # MA TRẬN PHÂN LOẠI BOLLINGER BANDS (ĐÃ CHỈNH SỬA CHUẨN XÁC)
         # ==========================================
         bb_score = 0.0
         bb_status = "Trung tính (SideWay / Theo dõi)"
         bb_desc = "Giá biến động an toàn trong dải, chưa xuất hiện tín hiệu thắt chặt hay mở dải rõ rệt."
 
-        # ƯU TIÊN 1: Bùng nổ Siêu Tốc (Breakout)
-        if (bw_curr > 1.15 * bw_prev) and (pct_b_curr >= 0.85) and (vol_curr >= 1.5 * vol_ma20_curr):
+        # 1. Bùng nổ Siêu Tốc (Breakout hoàn hảo + Vol lớn)
+        if (pct_b_curr >= 0.85) and (bw_change_ratio >= 1.10 or bw_curr >= 0.20) and (vol_curr >= 1.5 * vol_ma20_curr):
             bb_score = 2.0
             bb_status = "Bùng nổ dòng tiền (Breakout 🚀)"
-            bb_desc = f"Giá áp sát / bám sát biên trên (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng mạnh (+{((bw_curr/bw_prev)-1)*100:.1f}%) kết hợp Volume bùng nổ ({vol_curr/vol_ma20_curr:.1f}x MA20) -> Xác nhận sóng tăng Siêu Tốc."
+            bb_desc = f"Giá vượt / bám sát biên trên (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng mạnh (+{((bw_curr/bw_prev)-1)*100:.1f}%) kết hợp Volume bùng nổ ({vol_curr/vol_ma20_curr:.1f}x MA20) -> Xác nhận sóng tăng Siêu Tốc."
 
-        # ƯU TIÊN 2: Mở dải Bán tháo (Walking Lower)
-        elif (bw_curr > 1.15 * bw_prev) and (pct_b_curr <= 0.15) and (vol_curr >= 1.2 * vol_ma20_curr):
-            bb_score = -2.0
+        # 2. Tăng giá mở dải / Bám biên trên (Walking Upper - Bổ sung cho FRT)
+        elif (pct_b_curr >= 0.85) and (bw_change_ratio >= 1.05 or bw_curr >= 0.20):
+            bb_score = 1.5
+            bb_status = "Tăng giá mở dải (Walking Upper 🚀)"
+            bb_desc = f"Giá vượt/bám biên trên (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng hướng lên (+{((bw_curr/bw_prev)-1)*100:.1f}%) -> Tín hiệu mở sóng tăng mạnh mẽ."
+
+        # 3. Mở dải Bán tháo (Walking Lower)
+        elif (pct_b_curr <= 0.15) and (bw_change_ratio >= 1.05 or bw_curr >= 0.20):
+            bb_score = -2.0 if vol_curr >= 1.2 * vol_ma20_curr else -1.5
             bb_status = "Mở dải giảm mạnh (Walking Lower 🔴)"
-            bb_desc = f"Giá cắm sâu tiệm cận biên dưới (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng xuống dưới đi kèm Volume bán gia tăng -> Tín hiệu xả hàng / mở rộng đà rơi."
+            bb_desc = f"Giá cắm sâu tiệm cận / thủng biên dưới (%B = {pct_b_curr*100:.1f}%), dải BB mở rộng xuống dưới đi kèm áp lực bán -> Tín hiệu mở rộng đà rơi."
 
-        # ƯU TIÊN 3: Tích lũy Siết dải (Squeeze)
-        elif (bw_curr <= 1.10 * bw_min_20) and (0.40 <= pct_b_curr <= 0.60):
+        # 4. Tích lũy Siết dải (Squeeze)
+        elif (bw_curr <= 1.10 * bw_min_20) and (0.35 <= pct_b_curr <= 0.65):
             bb_score = 1.0
             bb_status = "Tích lũy chặt (Squeeze 🎯)"
             bb_desc = f"Dải BB siết chặt ở mức thấp nhất 20 phiên, giá dao động ổn định quanh trục giữa MA20 (%B = {pct_b_curr*100:.1f}%) -> Lực nén tích lũy rất mạnh, sẵn sàng chờ điểm nổ."
 
-        # ƯU TIÊN 4: Sóng tăng bền vững
-        elif (0.60 <= pct_b_curr < 0.85) and (bbm_curr > bbm_prev) and (vol_curr >= 1.0 * vol_ma20_curr):
+        # 5. Sóng tăng bền vững
+        elif (0.60 <= pct_b_curr < 0.85) and (bbm_curr > bbm_prev):
             bb_score = 1.0
             bb_status = "Sóng tăng ổn định (Bullish 📈)"
-            bb_desc = f"Giá duy trì thế dốc lên nằm trên MA20 (%B = {pct_b_curr*100:.1f}%), đường giữa MA20 hướng lên rõ nét và Volume ở mức khá -> Xu hướng tăng trưởng bền vững."
+            bb_desc = f"Giá duy trì thế dốc lên nằm trên MA20 (%B = {pct_b_curr*100:.1f}%), đường giữa MA20 hướng lên rõ nét -> Xu hướng tăng trưởng bền vững."
 
-        # ƯU TIÊN 5: Suy yếu / Mất mốc MA20
+        # 6. Suy yếu / Mất mốc MA20
         elif (pct_b_curr < 0.40) or (close_curr < bbm_curr):
             bb_score = -1.0
             bb_status = "Thủng hỗ trợ MA20 (Weak ⚠️)"
@@ -444,9 +450,6 @@ def render_detailed_report(res, symbol):
 
     st.markdown("### 📋 Chi tiết các chỉ báo kỹ thuật")
 
-    # =========================================================
-    # TRÌNH BÀY MỚI HIỂN THỊ TRẠNG THÁI NÉN / MỞ CHO BANDWIDTH
-    # =========================================================
     with st.expander("📈 Bollinger Bands (Nâng cấp)"):
         st.write(f"- **Trạng thái:** `{res['bb_signal']}`")
         st.write(f"- **Khung giá dải BB:** Biên trên `{round(res['bbu_curr'],1)}` | MA20 `{round(res['bbm_curr'],1)}` | Biên dưới `{round(res['bbl_curr'],1)}`")
@@ -507,7 +510,7 @@ tab1, tab2 = st.tabs(["🔍 Phân Tích Đơn Lẻ", "📋 Rổ Cổ Phiếu Wat
 with tab1:
     st.write("Nhập một mã chứng khoán Việt Nam bên dưới để bóc tách sức mạnh kỹ thuật đa tầng.")
     with st.form(key='ticker_form'):
-        symbol = st.text_input("Nhập mã chứng khoán (Ví dụ: SSI, PVD, HPG):", value="SSI").strip().upper()
+        symbol = st.text_input("Nhập mã chứng khoán (Ví dụ: SSI, PVD, HPG):", value="FRT").strip().upper()
         submit_button = st.form_submit_button(label='Phân Tích Ngay')
 
     if submit_button and symbol:
