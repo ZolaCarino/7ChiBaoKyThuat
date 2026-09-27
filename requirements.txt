@@ -1,4 +1,5 @@
 --extra-index-url https://pypi.vnstock.site/simple
+--trusted-host pypi.vnstock.site
 
 streamlit
 pandas
