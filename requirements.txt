@@ -1,4 +1,4 @@
 streamlit
 pandas
-vnstock
 pandas-ta-classic
+vnstock==3.0.6
