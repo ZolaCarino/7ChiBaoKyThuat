@@ -1,4 +1,6 @@
+--extra-index-url https://pypi.vnstock.site/simple
+
 streamlit
 pandas
 pandas-ta-classic
-vnstock==3.0.6
+vnstock
