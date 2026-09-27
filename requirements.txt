@@ -1,7 +1,8 @@
---extra-index-url https://pypi.vnstock.site/simple
---trusted-host pypi.vnstock.site
+--extra-index-url https://vnstocks.com/api/simple
+--trusted-host vnstocks.com
 
 streamlit
 pandas
 pandas-ta-classic
+vnai
 vnstock
