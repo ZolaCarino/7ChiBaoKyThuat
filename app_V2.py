@@ -1,7 +1,12 @@
 import streamlit as st
 import pandas as pd
 import pandas_ta_classic as ta
-from vnstock.ui import Market
+import vnstock
+import pkgutil
+st.write("Phiên bản:", getattr(vnstock, "__version__", "Không rõ"))
+st.write("Các thuộc tính cấp 1:", dir(vnstock))
+st.write("Các module con:", [m.name for m in pkgutil.iter_modules(vnstock.__path__)])
+st.stop()
 from datetime import datetime, timedelta
 import concurrent.futures
 import os
