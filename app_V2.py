@@ -501,7 +501,8 @@ def render_detailed_report(res, symbol):
 #                    GIAO DIỆN CHÍNH WEBAPP
 # ========================================================
 st.title("📊 Hệ Thống Phân Tích Cổ Phiếu Tự Động")
-
+import vnstock
+st.write("Nguồn hỗ trợ:", vnstock.sources, "| Cú pháp Market:", vnstock.show_doc(Market))
 tab1, tab2 = st.tabs(["🔍 Phân Tích Đơn Lẻ", "📋 Rổ Cổ Phiếu Watchlist"])
 
 # --------------------------------------------------------
