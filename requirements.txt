@@ -1,5 +1,5 @@
 streamlit
 pandas
 pandas-ta-classic
-vnai
-vnstock
+git+https://github.com/thinh-vu/vnai.git
+git+https://github.com/thinh-vu/vnstock.git
