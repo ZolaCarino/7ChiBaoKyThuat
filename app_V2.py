@@ -38,47 +38,59 @@ st.set_page_config(
 )
 
 @st.cache_data(ttl=900, show_spinner=False)
+DATA_SOURCES = ["tcbs", "dnse", "ssi", "fhsc"]
+
+def _normalize_ohlcv(df):
+    """Chuẩn hóa cột và index thời gian cho DataFrame OHLCV"""
+    if df is None or df.empty:
+        return None
+    df = df.copy()
+    df.rename(columns={
+        'time': 'Date', 'open': 'Open', 'high': 'High',
+        'low': 'Low', 'close': 'Close', 'volume': 'Volume'
+    }, inplace=True)
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+    df.sort_index(ascending=True, inplace=True)
+    return df
+
+@st.cache_data(ttl=900, show_spinner=False)
 def fetch_data_mac(symbol, show_error=True):
-    """Kéo dữ liệu 1 năm bằng Unified UI"""
+    """Kéo dữ liệu 1 năm cho Tab 1, tự động luân chuyển nguồn trong Vnstock 6.0.1"""
     end_date = str(datetime.now().date())
     start_date = str((datetime.now() - timedelta(days=365)).date())
-    
-    try:
-        mkt = Market()
-        df = mkt.equity(symbol).ohlcv(start=start_date, end=end_date)
-        
-        if df is None or df.empty:
-            if show_error:
-                st.error(f"[-] Không tìm thấy dữ liệu hoặc mã {symbol} không tồn tại.")
-            return None
-        
-        df.rename(columns={'time': 'Date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.set_index('Date', inplace=True)
-        return df
-    except Exception as e:
-        if show_error:
-            st.error(f"[-] Lỗi kết nối hệ thống với mã {symbol}: {e}")
-        return None
-        
+    last_error = None
+
+    for src in DATA_SOURCES:
+        try:
+            mkt = Market(src)
+            df = mkt.equity(symbol).ohlcv(start=start_date, end=end_date)
+            df = _normalize_ohlcv(df)
+            if df is not None and not df.empty:
+                return df
+        except Exception as e:
+            last_error = e
+            continue
+
+    if show_error:
+        if last_error:
+            st.error(f"[-] Lỗi kết nối hệ thống với mã {symbol}: {last_error}")
+        else:
+            st.error(f"[-] Không tìm thấy dữ liệu hoặc mã {symbol} không tồn tại.")
+    return None
+
 def fetch_data_pure(symbol, start_date, end_date):
-    """Hàm tải dữ liệu thuần túy, an toàn tuyệt đối khi chạy đa luồng (Không gọi st.*)"""
-    try:
-        from vnstock.ui import Market
-        mkt = Market()
-        df = mkt.equity(symbol).ohlcv(start=start_date, end=end_date)
-        
-        if df is None or df.empty:
-            return None
-            
-        df = df.copy()
-        df.rename(columns={'time': 'Date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.set_index('Date', inplace=True)
-        df.sort_index(ascending=True, inplace=True)
-        return df
-    except Exception:
-        return None
+    """Hàm tải dữ liệu thuần túy cho Tab 2 đa luồng (Không gọi st.*)"""
+    for src in DATA_SOURCES:
+        try:
+            mkt = Market(src)
+            df = mkt.equity(symbol).ohlcv(start=start_date, end=end_date)
+            df = _normalize_ohlcv(df)
+            if df is not None and not df.empty:
+                return df
+        except Exception:
+            continue
+    return None
 
 def compute_signals(df):
     """Hàm lõi chuyên tính toán toán học và trả về bộ chỉ báo + điểm số kỹ thuật"""
@@ -501,9 +513,6 @@ def render_detailed_report(res, symbol):
 #                    GIAO DIỆN CHÍNH WEBAPP
 # ========================================================
 st.title("📊 Hệ Thống Phân Tích Cổ Phiếu Tự Động")
-import vnstock
-st.write("Nguồn hỗ trợ:", vnstock.sources, "| Cú pháp Market:", vnstock.show_doc(Market))
-tab1, tab2 = st.tabs(["🔍 Phân Tích Đơn Lẻ", "📋 Rổ Cổ Phiếu Watchlist"])
 
 # --------------------------------------------------------
 # TAB 1: PHÂN TÍCH ĐƠN LẺ
