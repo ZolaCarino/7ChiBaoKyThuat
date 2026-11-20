@@ -37,7 +37,6 @@ st.set_page_config(
     layout="centered"
 )
 
-@st.cache_data(ttl=900, show_spinner=False)
 DATA_SOURCES = ["tcbs", "dnse", "ssi", "fhsc"]
 
 def _normalize_ohlcv(df):
