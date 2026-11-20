@@ -1,4 +1,6 @@
+--extra-index-url https://vnstocks.com/api/packages
+
 streamlit
 pandas
 pandas-ta-classic
-git+https://github.com/thinh-vu/vnstock.git
+vnstock
