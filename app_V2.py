@@ -37,7 +37,7 @@ st.set_page_config(
     layout="centered"
 )
 
-DATA_SOURCES = ["tcbs", "dnse", "ssi", "fhsc"]
+DATA_SOURCES = ["tcbs", "dnse", "ssi"]
 
 def _normalize_ohlcv(df):
     """Chuẩn hóa cột và index thời gian cho DataFrame OHLCV"""
